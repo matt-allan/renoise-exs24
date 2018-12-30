@@ -2,4 +2,5 @@
 *.DS_Store*
 *.git*
 test*
+assets/*
 exclude.list
