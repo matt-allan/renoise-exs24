@@ -26,5 +26,5 @@ This tool can currently map the following properties for zones and samples:
 ## Packaging
 
 ```
-$ zip -vr com.matta.exs24.xrnx * -x@./exclude.list
+$ make
 ```
