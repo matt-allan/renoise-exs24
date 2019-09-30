@@ -117,7 +117,14 @@ local function import_exs(path)
     return true
   end
 
-  local last_slash_pos = path:match"^.*()/"
+  if os.platform() == "WINDOWS" then
+    local last_slash_pos = path:match"^.*()\\"
+  else
+    local last_slash_pos = path:match"^.*()/"
+  end
+  if last_slash_pos == nil then
+    renoise.app():show_error("The EXS24 sample path could not be found")
+  end
   local instrument_filename = path:sub(last_slash_pos + 1)
   local instrument_path = path:sub(1, last_slash_pos)
 
