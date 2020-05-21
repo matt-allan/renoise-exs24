@@ -117,7 +117,12 @@ local function import_exs(path)
     return true
   end
 
-  local last_slash_pos = path:match"^.*()/"
+  -- determine which slash is in use
+  local slash = "/"
+  if path:find("\\") then
+    slash = "\\"
+  end
+  local last_slash_pos = path:match("^.*()"..slash)
   local instrument_filename = path:sub(last_slash_pos + 1)
   local instrument_path = path:sub(1, last_slash_pos)
 
