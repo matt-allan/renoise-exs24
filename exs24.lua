@@ -32,7 +32,7 @@ function load_exs(path)
 
   while (i + 84 < data_size) do
     fh:seek("set", i)
-    local sig = read_dword(fh, big_endian)
+    local sig = read_dword(fh, false)
 
     fh:seek("set", i + 4)
     local size = read_dword(fh, big_endian)
