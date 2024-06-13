@@ -215,6 +215,7 @@ function exs.parse_zone(buf, size)
     ---@diagnostic disable: duplicate-index
     kind = "zone",
     offset = buf:seek(),
+    -- TODO: parse out the bitwise flags here
     zone_flags = buf:u8(),
     key = buf:u8(),
     fine_tuning = buf:i8(),
@@ -232,6 +233,7 @@ function exs.parse_zone(buf, size)
     loop_start = buf:u32(),
     loop_end = buf:u32(),
     loop_crossfade = buf:u32(), -- 32
+    -- TODO: parse out the bitwise flags here
     loop_flags = buf:read_byte(), -- 33
     _ = buf:skip(49) and nil,
     output = buf:read_byte(), -- 83
@@ -258,6 +260,7 @@ function exs.parse_sample(buf, size)
     sample_type = buf:u32(), -- 32
     _ = buf:skip(48) and nil, -- 80
     file_path = buf:cstr(256), -- 336
+    -- TODO: rename to "filename"
     file_name = size >= 676 and buf:cstr(256) or nil,
     ---@diagnostic enable: duplicate-index
   }
