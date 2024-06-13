@@ -1,143 +1,150 @@
-require "exs24"
-require "util/process_slicer"
+_AUTO_RELOAD_DEBUG = true
 
-local function sample_path(instrument_path, instrument_filename, sample_filename)
-  -- Samples in the current path
-  if io.exists(instrument_path .. sample_filename) then
-    return instrument_path
+local exs = require "exs"
+local fspath = require "fspath"
+local bit = require "bit"
+
+---@param instrument renoise.Instrument
+---@param zone Zone
+---@param sample Sample
+local function insert_sample(instrument, zone, sample, samples_path)
+  local filename = sample.file_name or sample.header.name
+  local sample_path = fspath.join(samples_path, filename)
+
+  if not io.exists(sample_path) then
+    return false
   end
 
-  -- GarageBand instrument
-  -- i.e. "Sampler/Sampler Instruments/Puremagnetik/Eight Bit/" ->
-  -- "Sampler/Sampler Files/Puremagnetik Samples/Eight Bit"
-  if instrument_path:find("Sampler Instruments") then
-    local garageband_path = instrument_path:gsub(
-      "(%w+)/Sampler Instruments/(%w+)/(%w+)",
-      "%1/Sampler Files/%2 Samples/%3"
-    )
-    if io.exists(garageband_path .. sample_filename) then
-      return garageband_path
-    end
+  local rns_sample = instrument:insert_sample_at(#instrument.samples + 1)
+  rns_sample.sample_buffer:load_from(sample_path) -- todo: handle error
+  rns_sample.name = sample.header.name
+  -- todo: volume must be 0 - 4, what range is the exs using?
+  rns_sample.volume = 1
+  rns_sample.fine_tune = zone.fine_tuning
+  rns_sample.panning = math.max(math.min((zone.pan / 200) + .5, 1.0), 0.0)
+  rns_sample.oneshot = bit.band(zone.zone_flags, bit.lshift(1, 0)) ~= 0
+  rns_sample.sample_mapping.base_note = math.max(math.min(zone.key, 119), 0)
+  rns_sample.sample_mapping.note_range = {
+    math.max(math.min(zone.key_low, 119), 0),
+    math.min(119, zone.key_high)
+  }
+  rns_sample.sample_mapping.velocity_range = {
+    zone.velocity_low,
+    zone.velocity_high
+  }
+  rns_sample.loop_start = zone.loop_start + 1
+  rns_sample.loop_end = zone.loop_end - 1
+  local reverse = bit.band(zone.zone_flags, bit.lshift(1, 2)) ~= 0
+  if reverse then
+    rns_sample.loop_mode = rns_sample.LOOP_MODE_REVERSE
   end
 
-  -- Logic instrument
-  -- i.e. "Logic/Sampler Instruments/Puremagnetik/alphaSynth" ->
-  -- "GarageBand/Instrument Library/Sampler/Sampler Files/Puremagnetik Samples/alphaSynth"
-  if instrument_path:find("Logic") then
-    local logic_path = instrument_path:gsub(
-      "(%w*)Logic/Sampler Instruments/(%w+)/(%w+)",
-      "%1/GarageBand/Instrument Library/Sampler/Sampler Files/%2 Samples/%3"
-    )
-    if io.exists(logic_path .. sample_filename) then
-      return logic_path
-    end
-  end
-
-  -- Sample From Mars
-  -- i.e. "DX100 From Mars/Logic EXS/DX100 From Mars/Leads/Box Cello.exs" ->
-  -- "DX100 From Mars/WAV/Box Cello"
-  if instrument_path:find("Logic EXS") then
-    local mars_path = instrument_path:gsub(
-      "(%w+)/Logic EXS/.+",
-      "%1/WAV/"
-    ) .. instrument_filename:gsub("(.+)\.exs", "%1/")
-    if io.exists(mars_path .. sample_filename) then
-      return mars_path
-    end
-  end
-
-  return renoise.app():prompt_for_path("Sample files for " .. instrument_filename .. ":")
+  return true
 end
 
-local function import_samples(instrument, exs, sample_path)
+---@param filepath string
+---@param exs_file ExsFile
+local function import_samples(filepath, exs_file)
+  local dirname, basename = fspath.split(filepath)
+  local filename = string.sub(basename, 1, -#".exs"-1)
+
+  local instrument = renoise.song().selected_instrument
+  instrument:clear()
+
+  -- Use the instrument name if possible, which is always first
+  local exs_name = (exs_file.headers[1] or {}).name or filename
+  instrument.name = exs_name
+
+  local samples_path = nil
+
   local missing_samples = 0
 
-  for k,zone in pairs(exs.zones) do
-    if exs.samples[zone.sample_index + 1] then
-      local exs_sample = exs.samples[zone.sample_index + 1]
+  for k,zone in ipairs(exs_file.zones) do
+    local sample = exs_file.samples[zone.sample_index + 1]
 
-      if io.exists(sample_path .. exs_sample.file_name) then
-        local sample = instrument:insert_sample_at(#instrument.samples + 1)
-        if sample.sample_buffer:load_from(sample_path .. exs_sample.file_name) == true then
-          sample.name = exs_sample.name
-          -- todo: volume must be 0 - 4, what range is the exs using?
-          -- exs is using a twos complement byte so it has to be within  -128 -127?
-          sample.volume = 1
-          sample.fine_tune = math.max(math.min(zone.fine_tuning, 127), -127)
-          sample.panning = math.max(math.min((zone.pan / 200) + .5, 1.0), 0.0)
-          sample.oneshot = zone.oneshot
-          sample.sample_mapping.base_note = math.max(math.min(zone.key, 119), 0)
-          sample.sample_mapping.note_range = {
-            math.max(math.min(zone.key_low, 119), 0),
-            math.min(119, zone.key_high)
-          }
-          sample.sample_mapping.velocity_range = {zone.velocity_low, zone.velocity_high}
-          sample.loop_start = zone.loop_start + 1
-          sample.loop_end = zone.loop_end - 1
-          if zone.reverse then
-            sample.loop_mode = sample.LOOP_MODE_REVERSE
-          end
-        end
-      else
-        missing_samples = missing_samples + 1
+    -- Try to find the samples folder automatically. This is how Apple does it:
+    -- https://developer.apple.com/library/archive/technotes/tn2283/_index.html#//apple_ref/doc/uid/DTS40011217-CH1-TNTAG7
+    if not samples_path then
+      -- If the path is actually correct, we can just use that. It's not always
+      -- correct because it's an absolute path which may be from another machine.
+      if sample.file_path and io.exists(sample.file_path) then
+        samples_path = sample.file_path
       end
-    else
+
+      -- Are they in the same directory as the exs file?
+      local sample_filename = sample.file_name or sample.header.name
+      if io.exists(fspath.join(dirname, sample_filename)) then
+        samples_path = dirname
+      end
+
+      -- TODO: See if we can use common paths to find the folder.
+      -- Example with the real exs path vs the file_path from the sample:
+      -- The only thing in common here is "909 From Mars" and we have to walk up to find it
+      -- /Users/BEN/Desktop/In Progress/909 From Mars/WAV/Kits/01. Clean Kit 
+      -- /Users/matt/Samples/909 From Mars/Logic EXS/909 From Mars/02. Kits/
+      -- Another idea is letting the use specify path patterns
+
+      samples_path = renoise.app():prompt_for_path("Sample files for " .. filename .. ":")
+
+      -- TODO: consider tracking sample paths in a doc so we don't have to do this each time
+
+      if not samples_path then
+        renoise.app():show_error("The EXS24 sample path could not be found")
+        return
+      end
+    end
+
+    if not sample or not insert_sample(instrument, zone, sample, samples_path) then
       missing_samples = missing_samples + 1
     end
-    renoise.app():show_status(string.format("Importing EXS24 instrument (%d%%)...",((k/#exs.zones))*100))
-    coroutine.yield()
+
+    renoise.app():show_status(string.format("Importing EXS24 instrument (%d%%)...",((k/#exs_file.zones))*100))
   end
 
-  renoise.app():show_status("Importing Logic EXS24 instrument complete")
+  renoise.app():show_status("Importing EXS24 instrument complete")
+
   if missing_samples ~= 0 then
     renoise.app():show_warning(string.format("%d samples could not be found", missing_samples))
   end
 end
 
-local function import_exs(path)
+local function import_exs_file(filepath)
   renoise.app():show_status("Importing EXS24 instrument...")
 
-  local exs = load_exs(path)
-
-  if exs == false then
-    renoise.app():show_error("The EXS24 instrument could not be loaded")
-    table.clear(exs)
+  local fh = io.open(filepath, "rb")
+  if fh == nil then
+    renoise.app():show_error("The EXS file could not be loaded")
     return false
   end
 
-  if #exs.zones == 0 then
+  local buf = fh:read("*a")
+  if buf == nil then
+    renoise.app():show_error("The EXS file could not be read")
+    return false
+  end
+
+  local ok, status = pcall(exs.parse, buf)
+
+  if not ok then
+    renoise.app():show_error("The EXS24 instrument could not be loaded")
+    print(string.format("[ERROR] %s", status))
+    print(debug.traceback())
+    return false
+  end
+  -- @type ExsFile
+  local exs_file = status
+
+  if #exs_file.zones == 0 then
     renoise.app():show_status("The EXS24 instrument did not contain any zones")
-    table.clear(exs)
     return true
   end
 
-  if #exs.samples == 0 then
+  if #exs_file.samples == 0 then
     renoise.app():show_status("The EXS24 instrument did not contain any samples")
-    table.clear(exs)
     return true
   end
 
-  -- determine which slash is in use
-  local slash = "/"
-  if path:find("\\") then
-    slash = "\\"
-  end
-  local last_slash_pos = path:match("^.*()"..slash)
-  local instrument_filename = path:sub(last_slash_pos + 1)
-  local instrument_path = path:sub(1, last_slash_pos)
-
-  local instrument = renoise.song().selected_instrument
-  instrument:clear()
-  instrument.name = instrument_filename:sub(1, -5)
-
-  local sample_path = sample_path(instrument_path, instrument_filename, exs.samples[1].file_name)
-
-  if not sample_path then
-    renoise.app():show_error("The EXS24 sample path could not be found")
-  end
-
-  local process = ProcessSlicer(import_samples, instrument, exs, sample_path)
-  process:start()
+  import_samples(filepath, exs_file)
 
   return true
 end
@@ -146,6 +153,6 @@ if renoise.tool():has_file_import_hook("instrument", {"exs"}) == false then
   renoise.tool():add_file_import_hook({
     category = "instrument",
     extensions = {"exs"},
-    invoke = import_exs
+    invoke = import_exs_file,
   })
 end

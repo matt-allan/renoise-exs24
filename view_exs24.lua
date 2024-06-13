@@ -1,6 +1,6 @@
--- A simple utility for viewing the parsed contents of an EXS24 file.
-bit = require "bit"
-require "exs24"
+bit = bit or require "bit"
+local exs = require "exs"
+require "vardump"
 
 local filename = _G.arg[1]
 if not filename then
@@ -8,30 +8,12 @@ if not filename then
   os.exit(1)
 end
 
-local exs = load_exs(filename)
+local fh = io.open(filename, "rb")
+if fh == nil then error("failed opening file") end
+local buf = fh:read("*a")
 
-if not exs then
-  print("Invalid EXS")
-  os.exit(1)
-end
+local exs_file = exs.parse(buf)
 
-
-print("---------------------------------")
-print("Zones:")
-print("---------------------------------")
-for _,zone in pairs(exs.zones) do
-  for k,v in pairs(zone) do
-    print(k .. ": ", v)
-  end
-  print("---------------------------------")
-end
-
-print("Samples:")
-print("---------------------------------")
-for k,sample in pairs(exs.samples) do
-  print("index: " .. k - 1)
-  for k,v in pairs(sample) do
-    print(k .. ": ", v)
-  end
-  print("---------------------------------")
+for _,chunk in ipairs(exs_file.chunks) do
+  vardump(chunk)
 end

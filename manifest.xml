@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <RenoiseScriptingTool doc_version="0">
-  <ApiVersion>5</ApiVersion>
+  <ApiVersion>6.1</ApiVersion>
   <Id>com.matta.exs24</Id>
-  <Version>0.1</Version>
-  <Author>Matt Allan [mattallan@fastmail.com]</Author>
+  <Version>0.2</Version>
+  <Author>Matt Allan [oss@mattallan.me]</Author>
   <Name>EXS24</Name>
   <Category>Instruments</Category>
-  <Description>A tool that allows using EXS24 Instruments</Description>
+  <Description>Load EXS24 sampler instruments</Description>
   <Homepage>http://tools.renoise.com/tools/exs24</Homepage>
 </RenoiseScriptingTool>
