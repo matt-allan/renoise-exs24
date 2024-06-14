@@ -1,0 +1,18 @@
+name: Build
+
+on: [push]
+
+jobs:
+  build_and_test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: build
+        run: |
+          make
+      - name: Archive release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: xrnx
+          path: com.matta.exs24.xrnx
