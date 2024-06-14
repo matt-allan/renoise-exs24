@@ -78,7 +78,6 @@ function tool:insert_sample(instrument, zone, sample, samples_path)
     return false
   end
   rns_sample.name = sample.header.name
-  print(zone.volume, math.db2lin(zone.volume))
   rns_sample.volume = math.db2lin(zone.volume)
   rns_sample.fine_tune = zone.fine_tuning
   rns_sample.panning = math.max(math.min((zone.pan / 200) + .5, 1.0), 0.0)
