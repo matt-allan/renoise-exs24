@@ -60,9 +60,11 @@ function tool:import_exs_file(filepath)
   return true
 end
 
+---Insert a sample into the given renoise instrument.
 ---@param instrument renoise.Instrument
 ---@param zone Zone
 ---@param sample Sample
+---@return boolean
 function tool:insert_sample(instrument, zone, sample, samples_path)
   local filename = sample.file_name or sample.header.name
   local sample_path = fspath.join(samples_path, filename)
@@ -72,13 +74,15 @@ function tool:insert_sample(instrument, zone, sample, samples_path)
   end
 
   local rns_sample = instrument:insert_sample_at(#instrument.samples + 1)
-  rns_sample.sample_buffer:load_from(sample_path) -- todo: handle error
+  if not rns_sample.sample_buffer:load_from(sample_path) then
+    return false
+  end
   rns_sample.name = sample.header.name
-  -- todo: volume must be 0 - 4, what range is the exs using?
-  rns_sample.volume = 1
+  print(zone.volume, math.db2lin(zone.volume))
+  rns_sample.volume = math.db2lin(zone.volume)
   rns_sample.fine_tune = zone.fine_tuning
   rns_sample.panning = math.max(math.min((zone.pan / 200) + .5, 1.0), 0.0)
-  rns_sample.oneshot = bit.band(zone.zone_flags, bit.lshift(1, 0)) ~= 0
+  rns_sample.oneshot = zone.zone_flags.oneshot
   rns_sample.sample_mapping.base_note = math.max(math.min(zone.key, 119), 0)
   rns_sample.sample_mapping.note_range = {
     math.max(math.min(zone.key_low, 119), 0),
@@ -90,18 +94,25 @@ function tool:insert_sample(instrument, zone, sample, samples_path)
   }
   rns_sample.loop_start = zone.loop_start + 1
   rns_sample.loop_end = zone.loop_end - 1
-  local reverse = bit.band(zone.zone_flags, bit.lshift(1, 2)) ~= 0
-  if reverse then
-    rns_sample.loop_mode = rns_sample.LOOP_MODE_REVERSE
+
+  if zone.loop_flags.loop_on then
+    if zone.play_mode == exs.PLAY_MODE_REVERSE then
+      rns_sample.loop_mode = rns_sample.LOOP_MODE_REVERSE
+    elseif zone.play_mode == exs.PLAY_MODE_ALTERNATE then
+      rns_sample.loop_mode = rns_sample.LOOP_MODE_PING_PONG
+    else
+      rns_sample.loop_mode = rns_sample.LOOP_MODE_FORWARD
+    end
   end
 
   return true
 end
 
+---Import the samples from the Exs file.
 ---@param filepath string
 ---@param exs_file ExsFile
 function tool:import_samples(filepath, exs_file)
-  local dirname, basename = fspath.split(filepath)
+  local _dirname, basename = fspath.split(filepath)
   local filename = string.sub(basename, 1, -#".exs"-1)
 
   local instrument = renoise.song().selected_instrument
@@ -136,6 +147,10 @@ function tool:import_samples(filepath, exs_file)
   end
 end
 
+---Try to find the samples folder.
+---@param filepath string
+---@param exs_file ExsFile
+---@return string?
 function tool:find_samples(filepath, exs_file)
   -- Just check the first sample since they are all in the same folder
   local zone = exs_file.zones[1]
@@ -164,6 +179,7 @@ function tool:find_samples(filepath, exs_file)
     end
   end
 
+  -- If nothing works, ask the user for the path
   return self.app:prompt_for_path("Samples folder for " .. basename .. ":")
 end
 

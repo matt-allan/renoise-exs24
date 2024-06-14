@@ -7,6 +7,21 @@ if not filename then
   os.exit(1)
 end
 
+local function print_table(t, n)
+  n = n or 0
+
+  for k,v in pairs(t) do
+    if k ~= "header" then
+      if (type(v) == "table") then
+        print(string.rep(" ", n) .. string.format("  %s:", k))
+        print_table(v, n + 2)
+      else
+      print(string.rep(" ", n) .. string.format("  %s = %s", k, tostring(v)))
+      end
+    end
+  end
+end
+
 local fh = io.open(filename, "rb")
 if fh == nil then error("failed opening file") end
 local buf = fh:read("*a")
@@ -16,9 +31,5 @@ local exs_file = exs.parse(buf)
 for _,chunk in ipairs(exs_file.chunks) do
   print(string.format("%s @ %s", chunk.kind, chunk.offset))
 
-  for k,v in pairs(chunk) do
-    if k ~= "header" then
-      print(string.format("  %s = %s", k, v))
-    end
-  end
+  print_table(chunk)
 end

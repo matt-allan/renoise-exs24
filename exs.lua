@@ -6,6 +6,15 @@ local HEADER_SIZE = 84
 ---This module does not depend on renoise APIs.
 local exs = {}
 
+exs.PLAY_MODE_FORWARD = 0
+exs.PLAY_MODE_REVERSE = 1
+exs.PLAY_MODE_ALTERNATE = 2
+
+---@alias PlayMode
+---| 0 # forward
+---| 1 # reverse
+---| 2 # alternate
+
 ---@alias bytes string
 ---@alias byte integer
 
@@ -29,15 +38,27 @@ exs.Header = {}
 ---@field num_samples integer
 exs.Instrument = {}
 
+---@class ZoneFlags
+---@field oneshot boolean
+---@field pitch boolean
+---@field reverse boolean
+---@field has_velocity_range boolean
+---@field has_output boolean
+
+---@class LoopFlags
+---@field loop_on boolean
+---@field equal_power boolean
+---@field end_release boolean
+
 ---@class Zone
 ---@field kind "zone"
 ---@field offset integer
 ---@field header Header
----@field zone_flags byte
+---@field zone_flags ZoneFlags
 ---@field key integer
----@field fine_tuning integer
----@field pan integer
----@field volume integer
+---@field fine_tuning integer [-99, 99]
+---@field pan integer [-100, 100]
+---@field volume integer volume in decibels, [-12, - 12]
 ---@field key_low integer
 ---@field key_high integer
 ---@field velocity_low integer
@@ -47,7 +68,8 @@ exs.Instrument = {}
 ---@field loop_start integer
 ---@field loop_end integer
 ---@field loop_crossfade integer
----@field loop_flags byte
+---@field loop_flags LoopFlags
+---@field play_mode PlayMode
 ---@field output byte
 ---@field group_index integer
 ---@field sample_index integer
@@ -210,32 +232,64 @@ end
 
 ---@param buf Buffer
 ---@return table
+local function parse_zone_flags(buf)
+  local flags = buf:u8()
+
+  return {
+    oneshot = bit.band(flags, 1) ~= 0,
+    pitch = bit.band(flags, 2) == 0,
+    reverse = bit.band(flags, 4) ~= 0,
+    has_velocity_range = bit.band(flags, 8) ~= 0, -- true if velocity range is not default [0, 127]
+    -- unknown_bit_5 = bit.band(flags, 16) ~= 0,
+    -- unknown_bit_6 = bit.band(flags, 32) ~= 0,
+    has_output = bit.band(flags, 64) ~= 0, -- true if output is routed somewhere
+    -- unknown_bit_8 = bit.band(flags, 128) ~= 0,
+  }
+end
+
+---@param buf Buffer
+---@return table
+local function parse_loop_flags(buf)
+  local flags = buf:u8()
+
+  return {
+    loop_on = bit.band(flags, 1) ~= 0,
+    equal_power = bit.band(flags, 2) ~= 0,
+    end_release = bit.band(flags, 4) ~= 0,
+  }
+end
+
+---@param buf Buffer
+---@return table
 function exs.parse_zone(buf, size)
+  local offset = buf:seek()
+
   return {
     ---@diagnostic disable: duplicate-index
     kind = "zone",
     offset = buf:seek(),
-    -- TODO: parse out the bitwise flags here
-    zone_flags = buf:u8(),
+    zone_flags = parse_zone_flags(buf),
     key = buf:u8(),
     fine_tuning = buf:i8(),
-    pan = buf:i8(),
+    pan = buf:i8(), -- 4
     volume = buf:i8(),
-    _ = buf:skip() and nil, -- 6
+    _ = buf:skip() and nil,
     key_low = buf:u8(),
-    key_high = buf:u8(),
-    _ = buf:skip() and nil, -- 9
+    key_high = buf:u8(), -- 8
+    _ = buf:skip() and nil,
     velocity_low = buf:u8(),
     velocity_high = buf:u8(),
     _ = buf:skip() and nil, -- 12
-    sample_start = buf:u32(),
-    sample_end = buf:u32(),
-    loop_start = buf:u32(),
-    loop_end = buf:u32(),
+    sample_start = buf:u32(), -- 16
+    sample_end = buf:u32(), -- 20
+    loop_start = buf:u32(), -- 24
+    loop_end = buf:u32(), -- 28
     loop_crossfade = buf:u32(), -- 32
-    -- TODO: parse out the bitwise flags here
-    loop_flags = buf:read_byte(), -- 33
-    _ = buf:skip(49) and nil,
+    _ = buf:skip() and nil,
+    loop_flags = parse_loop_flags(buf), -- 34
+    play_mode = buf:u8(),
+    _ = buf:skip(47) and nil,
+    -- _ = buf:skip(48) and nil,
     output = buf:read_byte(), -- 83
     _ = buf:skip(5) and nil, -- 88
     group_index = buf:u32(), -- 92
@@ -260,7 +314,6 @@ function exs.parse_sample(buf, size)
     sample_type = buf:u32(), -- 32
     _ = buf:skip(48) and nil, -- 80
     file_path = buf:cstr(256), -- 336
-    -- TODO: rename to "filename"
     file_name = size >= 676 and buf:cstr(256) or nil,
     ---@diagnostic enable: duplicate-index
   }
