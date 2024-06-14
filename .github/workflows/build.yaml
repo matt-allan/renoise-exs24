@@ -9,8 +9,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
       - name: build
-        run: |
-          make
+        run: make
       - name: Archive release artifacts
         uses: actions/upload-artifact@v4
         with:
