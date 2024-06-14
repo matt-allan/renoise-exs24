@@ -1,6 +1,5 @@
 local exs = require "exs"
 local fspath = require "fspath"
-local bit = require "bit"
 
 local tool = {
   app = renoise.app(),
@@ -153,9 +152,9 @@ end
 function tool:find_samples(filepath, exs_file)
   -- Just check the first sample since they are all in the same folder
   local zone = exs_file.zones[1]
-  if not zone then error("no zones") end
+  if not zone then return nil end
   local sample = exs_file.samples[zone.sample_index + 1]
-  if not sample then error("missing sample") end
+  if not sample then return nil end
 
   local dirname, basename = fspath.split(filepath)
 
