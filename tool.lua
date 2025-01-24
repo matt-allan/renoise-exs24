@@ -95,11 +95,11 @@ function tool:insert_sample(instrument, zone, sample, samples_path)
 
   if zone.loop_flags.loop_on then
     if zone.play_mode == exs.PLAY_MODE_REVERSE then
-      rns_sample.loop_mode = rns_sample.LOOP_MODE_REVERSE
+      rns_sample.loop_mode = renoise.Sample.LOOP_MODE_REVERSE
     elseif zone.play_mode == exs.PLAY_MODE_ALTERNATE then
-      rns_sample.loop_mode = rns_sample.LOOP_MODE_PING_PONG
+      rns_sample.loop_mode = renoise.Sample.LOOP_MODE_PING_PONG
     else
-      rns_sample.loop_mode = rns_sample.LOOP_MODE_FORWARD
+      rns_sample.loop_mode = renoise.Sample.LOOP_MODE_FORWARD
     end
   end
 
