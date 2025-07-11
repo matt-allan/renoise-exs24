@@ -2,7 +2,7 @@
 <RenoiseScriptingTool doc_version="0">
   <ApiVersion>6.1</ApiVersion>
   <Id>com.matta.exs24</Id>
-  <Version>0.2</Version>
+  <Version>0.4.1</Version>
   <Author>Matt Allan [oss@mattallan.me]</Author>
   <Name>EXS24</Name>
   <Category>Instruments</Category>
